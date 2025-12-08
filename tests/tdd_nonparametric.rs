@@ -1,7 +1,7 @@
 mod common;
 
+use anofox_statistics::{kruskal_wallis, mann_whitney_u, rank, wilcoxon_signed_rank};
 use approx::assert_relative_eq;
-use libanostat::{kruskal_wallis, mann_whitney_u, rank, wilcoxon_signed_rank};
 
 const EPSILON: f64 = 1e-10;
 

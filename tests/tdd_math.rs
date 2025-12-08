@@ -1,7 +1,7 @@
 mod common;
 
+use anofox_statistics::utils::math;
 use approx::assert_relative_eq;
-use libanostat::utils::math;
 
 const EPSILON: f64 = 1e-12;
 

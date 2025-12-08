@@ -1,7 +1,7 @@
 mod common;
 
+use anofox_statistics::{diebold_mariano, LossFunction};
 use approx::assert_relative_eq;
-use libanostat::{diebold_mariano, LossFunction};
 
 const EPSILON: f64 = 1e-6;
 

@@ -1,7 +1,7 @@
 mod common;
 
+use anofox_statistics::shapiro_wilk;
 use approx::assert_relative_eq;
-use libanostat::shapiro_wilk;
 
 // Shapiro-Wilk has known implementation variations across software packages.
 // The W statistic typically matches to 3-4 decimal places between implementations.

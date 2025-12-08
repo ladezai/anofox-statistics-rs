@@ -1,9 +1,9 @@
-# libanostat
+# anofox-statistics
 
-[![CI](https://github.com/sipemu/stattests-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/sipemu/stattests-rs/actions/workflows/ci.yml)
-[![Crates.io](https://img.shields.io/crates/v/libanostat.svg)](https://crates.io/crates/libanostat)
-[![Documentation](https://docs.rs/libanostat/badge.svg)](https://docs.rs/libanostat)
-[![codecov](https://codecov.io/gh/sipemu/stattests-rs/branch/main/graph/badge.svg)](https://codecov.io/gh/sipemu/stattests-rs)
+[![CI](https://github.com/sipemu/anofox-statistics-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/sipemu/anofox-statistics-rs/actions/workflows/ci.yml)
+[![Crates.io](https://img.shields.io/crates/v/anofox-statistics.svg)](https://crates.io/crates/anofox-statistics)
+[![Documentation](https://docs.rs/anofox-statistics/badge.svg)](https://docs.rs/anofox-statistics)
+[![codecov](https://codecov.io/gh/sipemu/anofox-statistics-rs/branch/main/graph/badge.svg)](https://codecov.io/gh/sipemu/anofox-statistics-rs)
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
 A comprehensive statistical hypothesis testing library for Rust, validated against R.
@@ -53,7 +53,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-libanostat = "0.1"
+anofox-statistics = "0.1"
 ```
 
 ## Quick Start
@@ -61,7 +61,7 @@ libanostat = "0.1"
 ### T-Tests
 
 ```rust
-use libanostat::{t_test, TTestKind, Alternative};
+use anofox_statistics::{t_test, TTestKind, Alternative};
 
 let group1 = vec![1.2, 2.3, 3.4, 4.5, 5.6];
 let group2 = vec![2.1, 3.2, 4.3, 5.4, 6.5];
@@ -84,7 +84,7 @@ let result = t_test(&group1, &group2, TTestKind::Paired, Alternative::Less)?;
 ### Yuen's Robust T-Test
 
 ```rust
-use libanostat::yuen_test;
+use anofox_statistics::yuen_test;
 
 // 20% trimmed means (robust to outliers)
 let result = yuen_test(&group1, &group2, 0.2)?;
@@ -96,7 +96,7 @@ println!("p-value: {:.4}", result.p_value);
 ### Brown-Forsythe Test
 
 ```rust
-use libanostat::brown_forsythe;
+use anofox_statistics::brown_forsythe;
 
 let groups = vec![
     vec![1.0, 2.0, 3.0],
@@ -113,7 +113,7 @@ println!("p-value: {:.4}", result.p_value);
 ### Nonparametric Tests
 
 ```rust
-use libanostat::{mann_whitney_u, wilcoxon_signed_rank, kruskal_wallis, rank, brunner_munzel};
+use anofox_statistics::{mann_whitney_u, wilcoxon_signed_rank, kruskal_wallis, rank, brunner_munzel};
 
 // Ranking
 let data = vec![3.0, 1.0, 4.0, 1.0, 5.0];
@@ -136,7 +136,7 @@ println!("Estimate P(X < Y): {:.4}", result.estimate);
 ### Normality Tests
 
 ```rust
-use libanostat::{shapiro_wilk, dagostino_k_squared};
+use anofox_statistics::{shapiro_wilk, dagostino_k_squared};
 
 let data = vec![1.2, 2.3, 3.4, 4.5, 5.6, 6.7, 7.8];
 
@@ -154,7 +154,7 @@ println!("p-value: {:.4}", result.p_value);
 ### Resampling Methods
 
 ```rust
-use libanostat::resampling::{permutation_t_test, StationaryBootstrap, CircularBlockBootstrap};
+use anofox_statistics::resampling::{permutation_t_test, StationaryBootstrap, CircularBlockBootstrap};
 
 // Permutation t-test
 let result = permutation_t_test(&group1, &group2, 10000, Some(42))?;
@@ -171,7 +171,7 @@ let bootstrap = CircularBlockBootstrap::new(&time_series, 5, Some(42))?;
 ### Modern Distribution Tests
 
 ```rust
-use libanostat::modern::{energy_distance_test, mmd_test, Kernel};
+use anofox_statistics::modern::{energy_distance_test, mmd_test, Kernel};
 
 // Energy distance test
 let result = energy_distance_test(&sample1, &sample2, 1000, Some(42))?;
@@ -190,8 +190,8 @@ let result = mmd_test(&sample1, &sample2, Kernel::GaussianMedian, 1000, Some(42)
 ### Forecast Evaluation
 
 ```rust
-use libanostat::{diebold_mariano, LossFunction};
-use libanostat::forecast::spa_test;
+use anofox_statistics::{diebold_mariano, LossFunction};
+use anofox_statistics::forecast::spa_test;
 
 // Forecast errors from two competing models
 let errors_model1 = vec![0.1, -0.2, 0.3, -0.1, 0.2];

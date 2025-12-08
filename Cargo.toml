@@ -1,12 +1,12 @@
 [package]
-name = "libanostat"
+name = "anofox-statistics"
 version = "0.1.0"
 edition = "2021"
 authors = ["Simon Müller <code@santic.info>"]
 description = "A comprehensive statistical hypothesis testing library validated against R"
 license = "MIT"
-repository = "https://github.com/sipemu/stattests-rs"
-documentation = "https://docs.rs/libanostat"
+repository = "https://github.com/sipemu/anofox-statistics-rs"
+documentation = "https://docs.rs/anofox-statistics"
 readme = "README.md"
 keywords = ["statistics", "hypothesis-testing", "t-test", "shapiro-wilk", "nonparametric"]
 categories = ["science", "mathematics"]

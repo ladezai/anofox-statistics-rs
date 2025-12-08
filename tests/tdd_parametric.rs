@@ -1,7 +1,7 @@
 mod common;
 
+use anofox_statistics::{brown_forsythe, t_test, yuen_test, Alternative, TTestKind};
 use approx::assert_relative_eq;
-use libanostat::{brown_forsythe, t_test, yuen_test, Alternative, TTestKind};
 
 const EPSILON: f64 = 1e-10;
 
