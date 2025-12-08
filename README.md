@@ -1,9 +1,9 @@
 # libanostat
 
-[![CI](https://github.com/sipemu/libanostat/actions/workflows/ci.yml/badge.svg)](https://github.com/sipemu/libanostat/actions/workflows/ci.yml)
+[![CI](https://github.com/sipemu/stattests-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/sipemu/stattests-rs/actions/workflows/ci.yml)
 [![Crates.io](https://img.shields.io/crates/v/libanostat.svg)](https://crates.io/crates/libanostat)
 [![Documentation](https://docs.rs/libanostat/badge.svg)](https://docs.rs/libanostat)
-[![codecov](https://codecov.io/gh/sipemu/libanostat/branch/main/graph/badge.svg)](https://codecov.io/gh/sipemu/libanostat)
+[![codecov](https://codecov.io/gh/sipemu/stattests-rs/branch/main/graph/badge.svg)](https://codecov.io/gh/sipemu/stattests-rs)
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
 A comprehensive statistical hypothesis testing library for Rust, validated against R.
