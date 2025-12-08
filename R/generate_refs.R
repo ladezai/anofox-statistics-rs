@@ -416,5 +416,139 @@ save_ref("diebold_mariano.csv", list(
   p_value_se_h3 = dm_se_h3$p.value
 ))
 
+# ============================================
+# PHASE 1b: Additional Math Primitives (std_dev, skewness, kurtosis)
+# ============================================
+
+cat("\n=== Phase 1b: Additional Math Primitives ===\n")
+
+library(e1071)
+
+# Standard deviation (matches R's sd())
+save_ref("math_extended.csv", list(
+  # Standard deviation
+  sd_short = sd(x_short),
+  sd_long = sd(x_long),
+  sd_outlier = sd(x_outlier),
+
+  # Skewness (Fisher's, type 2)
+  skew_short = skewness(x_short, type = 2),
+  skew_long = skewness(x_long, type = 2),
+  skew_outlier = skewness(x_outlier, type = 2),
+
+  # Kurtosis (excess, Fisher's, type 2)
+  kurt_short = kurtosis(x_short, type = 2),
+  kurt_long = kurtosis(x_long, type = 2),
+  kurt_outlier = kurtosis(x_outlier, type = 2)
+))
+
+# Skewed data for testing
+x_skewed <- c(1, 1, 1, 1, 1, 2, 2, 3, 5, 10, 20)
+save_vector("vec_skewed.csv", x_skewed)
+
+save_ref("math_skewed.csv", list(
+  skew_skewed = skewness(x_skewed, type = 2),
+  kurt_skewed = kurtosis(x_skewed, type = 2)
+))
+
+# ============================================
+# PHASE 4b: Shapiro-Wilk Edge Cases
+# ============================================
+
+cat("\n=== Phase 4b: Shapiro-Wilk Edge Cases ===\n")
+
+# Very small samples (n=3, 4, 5)
+sw_n3 <- rnorm(3)
+sw_n4 <- rnorm(4)
+sw_n5 <- rnorm(5)
+sw_n10 <- rnorm(10)
+
+save_vector("sw_n3.csv", sw_n3)
+save_vector("sw_n4.csv", sw_n4)
+save_vector("sw_n5.csv", sw_n5)
+save_vector("sw_n10.csv", sw_n10)
+
+sw_n3_result <- shapiro.test(sw_n3)
+sw_n4_result <- shapiro.test(sw_n4)
+sw_n5_result <- shapiro.test(sw_n5)
+sw_n10_result <- shapiro.test(sw_n10)
+
+save_ref("shapiro_wilk_edge.csv", list(
+  # n=3 (exact formula)
+  w_n3 = sw_n3_result$statistic,
+  p_n3 = sw_n3_result$p.value,
+  # n=4 (small n path)
+  w_n4 = sw_n4_result$statistic,
+  p_n4 = sw_n4_result$p.value,
+  # n=5 (small n path)
+  w_n5 = sw_n5_result$statistic,
+  p_n5 = sw_n5_result$p.value,
+  # n=10 (4 <= n <= 11 path)
+  w_n10 = sw_n10_result$statistic,
+  p_n10 = sw_n10_result$p.value
+))
+
+# ============================================
+# PHASE 6: D'Agostino's K-Squared Test
+# ============================================
+
+cat("\n=== Phase 6: D'Agostino's K-Squared Test ===\n")
+
+library(moments)
+
+# Normal-ish data (should not reject)
+dag_normal <- rnorm(50, mean = 10, sd = 2)
+save_vector("dag_normal.csv", dag_normal)
+
+# Skewed data (should reject)
+dag_skewed <- rexp(50, rate = 0.5)
+save_vector("dag_skewed.csv", dag_skewed)
+
+# Test results
+dag_skew_test <- agostino.test(dag_normal)
+dag_kurt_test <- anscombe.test(dag_normal)
+
+dag_skew_test_skewed <- agostino.test(dag_skewed)
+dag_kurt_test_skewed <- anscombe.test(dag_skewed)
+
+save_ref("dagostino.csv", list(
+  # Normal data - skewness test
+  z_skew_normal = dag_skew_test$statistic[2],
+  p_skew_normal = dag_skew_test$p.value,
+  # Normal data - kurtosis test
+  z_kurt_normal = dag_kurt_test$statistic[2],
+  p_kurt_normal = dag_kurt_test$p.value,
+  # Skewed data - skewness test
+  z_skew_skewed = dag_skew_test_skewed$statistic[2],
+  p_skew_skewed = dag_skew_test_skewed$p.value,
+  # Skewed data - kurtosis test
+  z_kurt_skewed = dag_kurt_test_skewed$statistic[2],
+  p_kurt_skewed = dag_kurt_test_skewed$p.value
+))
+
+# ============================================
+# PHASE 7: Brunner-Munzel Test
+# ============================================
+
+cat("\n=== Phase 7: Brunner-Munzel Test ===\n")
+
+library(lawstat)
+
+# Test data with unequal variances
+bm_x <- c(1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 4, 1, 1)
+bm_y <- c(3, 3, 4, 3, 1, 2, 3, 1, 1, 5, 4)
+
+save_vector("bm_x.csv", bm_x)
+save_vector("bm_y.csv", bm_y)
+
+bm_result <- brunner.munzel.test(bm_x, bm_y)
+
+save_ref("brunner_munzel.csv", list(
+  statistic = bm_result$statistic,
+  df = bm_result$parameter,
+  p_value = bm_result$p.value,
+  estimate = bm_result$estimate
+))
+
 cat("\n=== Reference generation complete ===\n")
 cat("Run 'cargo test' to verify Rust implementation against these references.\n")

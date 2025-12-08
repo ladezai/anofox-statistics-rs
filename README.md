@@ -13,8 +13,9 @@ This library provides a wide range of statistical tests commonly used in data an
 ## Features
 
 - **Math Primitives**
-  - Mean, variance, median
+  - Mean, variance, standard deviation, median
   - Trimmed mean (robust to outliers)
+  - Skewness and kurtosis (Fisher's definition, matching R's e1071)
 
 - **Parametric Tests**
   - T-tests (Welch, Student, Paired) with all alternatives
@@ -26,12 +27,25 @@ This library provides a wide range of statistical tests commonly used in data an
   - Mann-Whitney U test (Wilcoxon rank-sum)
   - Wilcoxon signed-rank test (paired)
   - Kruskal-Wallis test (k-sample)
+  - Brunner-Munzel test (robust rank-based test for stochastic equality)
 
 - **Distributional Tests**
   - Shapiro-Wilk normality test (Royston AS R94)
+  - D'Agostino's K-squared test (omnibus normality test using skewness and kurtosis)
+
+- **Resampling Methods**
+  - Permutation engine with custom statistics
+  - Permutation t-test
+  - Stationary bootstrap (for dependent data)
+  - Circular block bootstrap
+
+- **Modern Distribution Tests**
+  - Energy distance test (univariate and multivariate)
+  - Maximum Mean Discrepancy (MMD) with multiple kernels (Gaussian, Linear, Polynomial, Laplacian)
 
 - **Forecast Evaluation**
   - Diebold-Mariano test for comparing predictive accuracy
+  - Superior Predictive Ability (SPA) test for multiple model comparison
 
 ## Installation
 
@@ -99,7 +113,7 @@ println!("p-value: {:.4}", result.p_value);
 ### Nonparametric Tests
 
 ```rust
-use libanostat::{mann_whitney_u, wilcoxon_signed_rank, kruskal_wallis, rank};
+use libanostat::{mann_whitney_u, wilcoxon_signed_rank, kruskal_wallis, rank, brunner_munzel};
 
 // Ranking
 let data = vec![3.0, 1.0, 4.0, 1.0, 5.0];
@@ -113,43 +127,90 @@ let result = wilcoxon_signed_rank(&group1, &group2)?;
 
 // Kruskal-Wallis test
 let result = kruskal_wallis(&groups)?;
+
+// Brunner-Munzel test (robust alternative to Mann-Whitney)
+let result = brunner_munzel(&group1, &group2)?;
+println!("Estimate P(X < Y): {:.4}", result.estimate);
 ```
 
-### Shapiro-Wilk Normality Test
+### Normality Tests
 
 ```rust
-use libanostat::shapiro_wilk;
+use libanostat::{shapiro_wilk, dagostino_k_squared};
 
 let data = vec![1.2, 2.3, 3.4, 4.5, 5.6, 6.7, 7.8];
 
+// Shapiro-Wilk test
 let result = shapiro_wilk(&data)?;
-
 println!("W statistic: {:.4}", result.statistic);
 println!("p-value: {:.4}", result.p_value);
 
-// High p-value suggests data is consistent with normal distribution
-if result.p_value > 0.05 {
-    println!("Cannot reject normality at 5% level");
-}
+// D'Agostino's K-squared test (omnibus test using skewness and kurtosis)
+let result = dagostino_k_squared(&data)?;
+println!("K-squared: {:.4}", result.statistic);
+println!("p-value: {:.4}", result.p_value);
 ```
 
-### Diebold-Mariano Forecast Test
+### Resampling Methods
+
+```rust
+use libanostat::resampling::{permutation_t_test, StationaryBootstrap, CircularBlockBootstrap};
+
+// Permutation t-test
+let result = permutation_t_test(&group1, &group2, 10000, Some(42))?;
+println!("p-value: {:.4}", result.p_value);
+
+// Stationary bootstrap for time series
+let bootstrap = StationaryBootstrap::new(&time_series, 10.0, Some(42))?;
+let samples: Vec<Vec<f64>> = bootstrap.take(1000).collect();
+
+// Circular block bootstrap
+let bootstrap = CircularBlockBootstrap::new(&time_series, 5, Some(42))?;
+```
+
+### Modern Distribution Tests
+
+```rust
+use libanostat::modern::{energy_distance_test, mmd_test, Kernel};
+
+// Energy distance test
+let result = energy_distance_test(&sample1, &sample2, 1000, Some(42))?;
+println!("Energy distance: {:.4}", result.statistic);
+println!("p-value: {:.4}", result.p_value);
+
+// Maximum Mean Discrepancy with Gaussian kernel
+let result = mmd_test(&sample1, &sample2, Kernel::Gaussian(1.0), 1000, Some(42))?;
+println!("MMD: {:.4}", result.statistic);
+println!("p-value: {:.4}", result.p_value);
+
+// MMD with automatic bandwidth selection
+let result = mmd_test(&sample1, &sample2, Kernel::GaussianMedian, 1000, Some(42))?;
+```
+
+### Forecast Evaluation
 
 ```rust
 use libanostat::{diebold_mariano, LossFunction};
+use libanostat::forecast::spa_test;
 
 // Forecast errors from two competing models
 let errors_model1 = vec![0.1, -0.2, 0.3, -0.1, 0.2];
 let errors_model2 = vec![0.2, -0.3, 0.4, -0.2, 0.3];
 
-// Test with squared error loss, h=1 step ahead
+// Diebold-Mariano test
 let result = diebold_mariano(&errors_model1, &errors_model2, LossFunction::SquaredError, 1)?;
-
 println!("DM statistic: {:.4}", result.statistic);
 println!("p-value: {:.4}", result.p_value);
 
-// Test with absolute error loss
-let result = diebold_mariano(&errors_model1, &errors_model2, LossFunction::AbsoluteError, 1)?;
+// Superior Predictive Ability test (compare benchmark vs multiple models)
+let benchmark_losses = vec![0.5, 0.6, 0.4, 0.7, 0.5];
+let model_losses = vec![
+    vec![0.4, 0.5, 0.3, 0.6, 0.4],  // Model 1
+    vec![0.6, 0.7, 0.5, 0.8, 0.6],  // Model 2
+];
+let result = spa_test(&benchmark_losses, &model_losses, 1000, 10.0, Some(42))?;
+println!("SPA statistic: {:.4}", result.statistic);
+println!("p-value: {:.4}", result.p_value);
 ```
 
 ## API Reference
@@ -170,18 +231,37 @@ let result = diebold_mariano(&errors_model1, &errors_model2, LossFunction::Absol
 | `mann_whitney_u(x, y)` | Mann-Whitney U test (Wilcoxon rank-sum) |
 | `wilcoxon_signed_rank(x, y)` | Wilcoxon signed-rank test for paired samples |
 | `kruskal_wallis(groups)` | Kruskal-Wallis H test for k independent samples |
+| `brunner_munzel(x, y)` | Brunner-Munzel test for stochastic equality |
 
 ### Distributional Tests
 
 | Function | Description |
 |----------|-------------|
 | `shapiro_wilk(data)` | Shapiro-Wilk test for normality |
+| `dagostino_k_squared(data)` | D'Agostino's K-squared omnibus normality test |
+
+### Resampling Methods
+
+| Function | Description |
+|----------|-------------|
+| `permutation_t_test(x, y, n_permutations, seed)` | Permutation-based t-test |
+| `PermutationEngine::new(x, y, seed)` | Generic permutation testing engine |
+| `StationaryBootstrap::new(data, expected_length, seed)` | Stationary bootstrap for dependent data |
+| `CircularBlockBootstrap::new(data, block_length, seed)` | Circular block bootstrap |
+
+### Modern Distribution Tests
+
+| Function | Description |
+|----------|-------------|
+| `energy_distance_test(x, y, n_permutations, seed)` | Energy distance two-sample test |
+| `mmd_test(x, y, kernel, n_permutations, seed)` | Maximum Mean Discrepancy test |
 
 ### Forecast Evaluation
 
 | Function | Description |
 |----------|-------------|
 | `diebold_mariano(e1, e2, loss, h)` | Diebold-Mariano test for predictive accuracy |
+| `spa_test(benchmark, models, n_bootstrap, block_length, seed)` | Superior Predictive Ability test |
 
 ### Math Primitives
 
@@ -189,8 +269,11 @@ let result = diebold_mariano(&errors_model1, &errors_model2, LossFunction::Absol
 |----------|-------------|
 | `mean(data)` | Arithmetic mean |
 | `variance(data)` | Sample variance |
+| `std_dev(data)` | Sample standard deviation |
 | `median(data)` | Median |
 | `trimmed_mean(data, trim)` | Trimmed mean |
+| `skewness(data)` | Sample skewness (Fisher's, type 2) |
+| `kurtosis(data)` | Sample excess kurtosis (Fisher's, type 2) |
 
 ## Validation
 
@@ -201,7 +284,10 @@ This library is developed using Test-Driven Development (TDD) with R as the orac
 - `car::leveneTest()` for Brown-Forsythe
 - `wilcox.test()` for Mann-Whitney and Wilcoxon tests
 - `kruskal.test()` for Kruskal-Wallis
+- `lawstat::brunner.munzel.test()` for Brunner-Munzel
 - `shapiro.test()` for Shapiro-Wilk
+- `moments::agostino.test()` and `moments::anscombe.test()` for D'Agostino
+- `e1071::skewness()` and `e1071::kurtosis()` for skewness/kurtosis
 - `forecast::dm.test()` for Diebold-Mariano
 
 All tests ensure numerical agreement with R within appropriate tolerances.
@@ -210,6 +296,7 @@ All tests ensure numerical agreement with R within appropriate tolerances.
 
 - [statrs](https://crates.io/crates/statrs) - Statistical distributions
 - [thiserror](https://crates.io/crates/thiserror) - Error handling
+- [rand](https://crates.io/crates/rand) - Random number generation for resampling
 
 ## License
 

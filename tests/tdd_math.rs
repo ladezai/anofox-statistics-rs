@@ -201,3 +201,173 @@ fn test_trimmed_mean_empty_returns_error() {
     let empty: Vec<f64> = vec![];
     assert!(math::trimmed_mean(&empty, 0.2).is_err());
 }
+
+// ============================================
+// Standard Deviation Tests
+// ============================================
+
+#[test]
+fn test_std_dev_short_vector() {
+    let refs = common::load_reference_scalars("math_extended.csv");
+    let x_short = vec![1.2, 2.3, 3.4, 4.5, 5.6];
+
+    let result = math::std_dev(&x_short).expect("std_dev should succeed");
+    assert_relative_eq!(result, refs["sd_short"], epsilon = EPSILON);
+}
+
+#[test]
+fn test_std_dev_long_vector() {
+    let refs = common::load_reference_scalars("math_extended.csv");
+    let x_long = common::load_reference_vector("vec_long.csv");
+
+    let result = math::std_dev(&x_long).expect("std_dev should succeed");
+    assert_relative_eq!(result, refs["sd_long"], epsilon = EPSILON);
+}
+
+#[test]
+fn test_std_dev_outlier_vector() {
+    let refs = common::load_reference_scalars("math_extended.csv");
+    let x_outlier = vec![1.0, 1.0, 1.0, 1.0, 100.0];
+
+    let result = math::std_dev(&x_outlier).expect("std_dev should succeed");
+    assert_relative_eq!(result, refs["sd_outlier"], epsilon = EPSILON);
+}
+
+#[test]
+fn test_std_dev_single_element_returns_error() {
+    let x_single = vec![42.0];
+    // std_dev needs at least 2 elements (since variance needs n-1)
+    assert!(math::std_dev(&x_single).is_err());
+}
+
+#[test]
+fn test_std_dev_empty_returns_error() {
+    let empty: Vec<f64> = vec![];
+    assert!(math::std_dev(&empty).is_err());
+}
+
+// ============================================
+// Skewness Tests
+// ============================================
+
+#[test]
+fn test_skewness_short_vector() {
+    let refs = common::load_reference_scalars("math_extended.csv");
+    let x_short = vec![1.2, 2.3, 3.4, 4.5, 5.6];
+
+    let result = math::skewness(&x_short).expect("skewness should succeed");
+    // Symmetric data should have skewness near 0
+    assert_relative_eq!(result, refs["skew_short"], epsilon = 1e-10);
+}
+
+#[test]
+fn test_skewness_long_vector() {
+    let refs = common::load_reference_scalars("math_extended.csv");
+    let x_long = common::load_reference_vector("vec_long.csv");
+
+    let result = math::skewness(&x_long).expect("skewness should succeed");
+    assert_relative_eq!(result, refs["skew_long"], epsilon = 1e-10);
+}
+
+#[test]
+fn test_skewness_outlier_vector() {
+    let refs = common::load_reference_scalars("math_extended.csv");
+    let x_outlier = vec![1.0, 1.0, 1.0, 1.0, 100.0];
+
+    let result = math::skewness(&x_outlier).expect("skewness should succeed");
+    // Right-skewed data (outlier on right) should have positive skewness
+    assert_relative_eq!(result, refs["skew_outlier"], epsilon = 1e-10);
+}
+
+#[test]
+fn test_skewness_skewed_data() {
+    let refs = common::load_reference_scalars("math_skewed.csv");
+    let x_skewed = common::load_reference_vector("vec_skewed.csv");
+
+    let result = math::skewness(&x_skewed).expect("skewness should succeed");
+    assert_relative_eq!(result, refs["skew_skewed"], epsilon = 1e-10);
+}
+
+#[test]
+fn test_skewness_constant_data_returns_zero() {
+    let constant = vec![5.0, 5.0, 5.0, 5.0, 5.0];
+
+    let result = math::skewness(&constant).expect("skewness should succeed");
+    assert_relative_eq!(result, 0.0, epsilon = EPSILON);
+}
+
+#[test]
+fn test_skewness_two_elements_returns_error() {
+    let x = vec![1.0, 2.0];
+    // Skewness needs at least 3 elements
+    assert!(math::skewness(&x).is_err());
+}
+
+#[test]
+fn test_skewness_empty_returns_error() {
+    let empty: Vec<f64> = vec![];
+    assert!(math::skewness(&empty).is_err());
+}
+
+// ============================================
+// Kurtosis Tests
+// ============================================
+
+#[test]
+fn test_kurtosis_short_vector() {
+    let refs = common::load_reference_scalars("math_extended.csv");
+    let x_short = vec![1.2, 2.3, 3.4, 4.5, 5.6];
+
+    let result = math::kurtosis(&x_short).expect("kurtosis should succeed");
+    // Uniform-ish data has negative excess kurtosis
+    assert_relative_eq!(result, refs["kurt_short"], epsilon = 1e-10);
+}
+
+#[test]
+fn test_kurtosis_long_vector() {
+    let refs = common::load_reference_scalars("math_extended.csv");
+    let x_long = common::load_reference_vector("vec_long.csv");
+
+    let result = math::kurtosis(&x_long).expect("kurtosis should succeed");
+    assert_relative_eq!(result, refs["kurt_long"], epsilon = 1e-10);
+}
+
+#[test]
+fn test_kurtosis_outlier_vector() {
+    let refs = common::load_reference_scalars("math_extended.csv");
+    let x_outlier = vec![1.0, 1.0, 1.0, 1.0, 100.0];
+
+    let result = math::kurtosis(&x_outlier).expect("kurtosis should succeed");
+    // Heavy-tailed data (outlier) should have positive excess kurtosis
+    assert_relative_eq!(result, refs["kurt_outlier"], epsilon = 1e-10);
+}
+
+#[test]
+fn test_kurtosis_skewed_data() {
+    let refs = common::load_reference_scalars("math_skewed.csv");
+    let x_skewed = common::load_reference_vector("vec_skewed.csv");
+
+    let result = math::kurtosis(&x_skewed).expect("kurtosis should succeed");
+    assert_relative_eq!(result, refs["kurt_skewed"], epsilon = 1e-10);
+}
+
+#[test]
+fn test_kurtosis_constant_data_returns_zero() {
+    let constant = vec![5.0, 5.0, 5.0, 5.0, 5.0];
+
+    let result = math::kurtosis(&constant).expect("kurtosis should succeed");
+    assert_relative_eq!(result, 0.0, epsilon = EPSILON);
+}
+
+#[test]
+fn test_kurtosis_three_elements_returns_error() {
+    let x = vec![1.0, 2.0, 3.0];
+    // Kurtosis needs at least 4 elements
+    assert!(math::kurtosis(&x).is_err());
+}
+
+#[test]
+fn test_kurtosis_empty_returns_error() {
+    let empty: Vec<f64> = vec![];
+    assert!(math::kurtosis(&empty).is_err());
+}
