@@ -1,4 +1,7 @@
 use crate::error::{Result, StatError};
+use rand::seq::SliceRandom;
+use rand::SeedableRng;
+use rand_chacha::ChaCha8Rng;
 
 /// Result of the Energy Distance test
 #[derive(Debug, Clone)]
@@ -21,95 +24,58 @@ fn euclidean_distance(a: &[f64], b: &[f64]) -> f64 {
         .sqrt()
 }
 
+/// Compute mean pairwise distance between two samples.
+fn mean_pairwise_distance(x: &[&[f64]], y: &[&[f64]]) -> f64 {
+    let mut sum = 0.0;
+    for xi in x.iter() {
+        for yj in y.iter() {
+            sum += euclidean_distance(xi, yj);
+        }
+    }
+    sum / (x.len() as f64 * y.len() as f64)
+}
+
+/// Compute mean within-sample distance (excluding diagonal).
+fn mean_within_distance(samples: &[&[f64]]) -> f64 {
+    let n = samples.len();
+    if n < 2 {
+        return 0.0;
+    }
+
+    let mut sum = 0.0;
+    for i in 0..n {
+        for j in 0..n {
+            if i != j {
+                sum += euclidean_distance(samples[i], samples[j]);
+            }
+        }
+    }
+    let n_f = n as f64;
+    sum / (n_f * (n_f - 1.0))
+}
+
 /// Compute the energy distance statistic between two samples.
 ///
 /// E(X,Y) = 2*E|X-Y| - E|X-X'| - E|Y-Y'|
 /// where X,X' are iid from first distribution, Y,Y' from second.
 fn energy_distance_statistic(x: &[&[f64]], y: &[&[f64]]) -> f64 {
-    let n = x.len();
-    let m = y.len();
-
-    if n == 0 || m == 0 {
+    if x.is_empty() || y.is_empty() {
         return 0.0;
     }
 
-    let n_f = n as f64;
-    let m_f = m as f64;
+    let mean_xy = mean_pairwise_distance(x, y);
+    let mean_xx = mean_within_distance(x);
+    let mean_yy = mean_within_distance(y);
 
-    // Between-sample distances: E|X-Y|
-    let mut sum_xy = 0.0;
-    for xi in x.iter() {
-        for yj in y.iter() {
-            sum_xy += euclidean_distance(xi, yj);
-        }
-    }
-    let mean_xy = sum_xy / (n_f * m_f);
-
-    // Within-sample distances for X: E|X-X'|
-    let mut sum_xx = 0.0;
-    for i in 0..n {
-        for j in 0..n {
-            if i != j {
-                sum_xx += euclidean_distance(x[i], x[j]);
-            }
-        }
-    }
-    let mean_xx = if n > 1 {
-        sum_xx / (n_f * (n_f - 1.0))
-    } else {
-        0.0
-    };
-
-    // Within-sample distances for Y: E|Y-Y'|
-    let mut sum_yy = 0.0;
-    for i in 0..m {
-        for j in 0..m {
-            if i != j {
-                sum_yy += euclidean_distance(y[i], y[j]);
-            }
-        }
-    }
-    let mean_yy = if m > 1 {
-        sum_yy / (m_f * (m_f - 1.0))
-    } else {
-        0.0
-    };
-
-    // Energy distance
     2.0 * mean_xy - mean_xx - mean_yy
 }
 
-/// Perform the Energy Distance test for equality of distributions.
-///
-/// This is a powerful non-parametric two-sample test that can detect
-/// differences in both location and shape of distributions.
-///
-/// For univariate data, pass single-element slices.
-/// For multivariate data, pass vectors of the same dimension.
-///
-/// # Arguments
-/// * `x` - First sample (each element is a d-dimensional observation)
-/// * `y` - Second sample (each element is a d-dimensional observation)
-/// * `n_permutations` - Number of permutations for p-value estimation
-/// * `seed` - Optional random seed for reproducibility
-///
-/// # Returns
-/// * `EnergyDistanceResult` containing energy distance and p-value
-///
-/// # References
-/// * Székely, G.J. and Rizzo, M.L. (2004). "Testing for equal distributions in high dimension"
-/// * Székely, G.J. and Rizzo, M.L. (2013). "Energy statistics: A class of statistics based on distances"
-pub fn energy_distance_test(
-    x: &[Vec<f64>],
-    y: &[Vec<f64>],
-    n_permutations: usize,
-    seed: Option<u64>,
-) -> Result<EnergyDistanceResult> {
+/// Validate energy distance inputs and return the dimension.
+fn validate_energy_inputs(x: &[Vec<f64>], y: &[Vec<f64>]) -> Result<()> {
     if x.is_empty() || y.is_empty() {
         return Err(StatError::EmptyData);
     }
 
-    // Check dimensions match
     let dim = x[0].len();
     if dim == 0 {
         return Err(StatError::InvalidParameter(
@@ -117,37 +83,26 @@ pub fn energy_distance_test(
         ));
     }
 
-    for xi in x.iter() {
-        if xi.len() != dim {
-            return Err(StatError::InvalidParameter(
-                "All data points must have the same dimension".to_string(),
-            ));
-        }
+    let all_same_dim = x.iter().chain(y.iter()).all(|v| v.len() == dim);
+    if !all_same_dim {
+        return Err(StatError::InvalidParameter(
+            "All data points must have the same dimension".to_string(),
+        ));
     }
 
-    for yi in y.iter() {
-        if yi.len() != dim {
-            return Err(StatError::InvalidParameter(
-                "All data points must have the same dimension".to_string(),
-            ));
-        }
-    }
+    Ok(())
+}
 
-    // Convert to slices for the statistic function
-    let x_slices: Vec<&[f64]> = x.iter().map(|v| v.as_slice()).collect();
-    let y_slices: Vec<&[f64]> = y.iter().map(|v| v.as_slice()).collect();
-
-    // Compute observed statistic
-    let observed = energy_distance_statistic(&x_slices, &y_slices);
-
-    // Combine all observations for permutation testing
+/// Run permutation test for energy distance.
+fn run_energy_permutation_test(
+    x: &[Vec<f64>],
+    y: &[Vec<f64>],
+    observed: f64,
+    n_permutations: usize,
+    seed: Option<u64>,
+) -> f64 {
     let combined: Vec<Vec<f64>> = x.iter().chain(y.iter()).cloned().collect();
     let n1 = x.len();
-
-    // For multivariate data, we need a custom permutation approach
-    use rand::seq::SliceRandom;
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
     let mut rng = match seed {
         Some(s) => ChaCha8Rng::seed_from_u64(s),
@@ -176,7 +131,44 @@ pub fn energy_distance_test(
         }
     }
 
-    let p_value = (count_extreme as f64 + 1.0) / (n_permutations as f64 + 1.0);
+    (count_extreme as f64 + 1.0) / (n_permutations as f64 + 1.0)
+}
+
+/// Perform the Energy Distance test for equality of distributions.
+///
+/// This is a powerful non-parametric two-sample test that can detect
+/// differences in both location and shape of distributions.
+///
+/// For univariate data, pass single-element slices.
+/// For multivariate data, pass vectors of the same dimension.
+///
+/// # Arguments
+/// * `x` - First sample (each element is a d-dimensional observation)
+/// * `y` - Second sample (each element is a d-dimensional observation)
+/// * `n_permutations` - Number of permutations for p-value estimation
+/// * `seed` - Optional random seed for reproducibility
+///
+/// # Returns
+/// * `EnergyDistanceResult` containing energy distance and p-value
+///
+/// # References
+/// * Székely, G.J. and Rizzo, M.L. (2004). "Testing for equal distributions in high dimension"
+/// * Székely, G.J. and Rizzo, M.L. (2013). "Energy statistics: A class of statistics based on distances"
+pub fn energy_distance_test(
+    x: &[Vec<f64>],
+    y: &[Vec<f64>],
+    n_permutations: usize,
+    seed: Option<u64>,
+) -> Result<EnergyDistanceResult> {
+    validate_energy_inputs(x, y)?;
+
+    // Convert to slices and compute observed statistic
+    let x_slices: Vec<&[f64]> = x.iter().map(|v| v.as_slice()).collect();
+    let y_slices: Vec<&[f64]> = y.iter().map(|v| v.as_slice()).collect();
+    let observed = energy_distance_statistic(&x_slices, &y_slices);
+
+    // Run permutation test
+    let p_value = run_energy_permutation_test(x, y, observed, n_permutations, seed);
 
     Ok(EnergyDistanceResult {
         statistic: observed,

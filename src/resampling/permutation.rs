@@ -5,6 +5,53 @@ use rand::seq::SliceRandom;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
+/// Check if a permutation statistic is as extreme as the observed value.
+#[inline]
+fn is_extreme(perm_stat: f64, observed: f64, alternative: Alternative) -> bool {
+    match alternative {
+        Alternative::TwoSided => perm_stat.abs() >= observed.abs(),
+        Alternative::Greater => perm_stat >= observed,
+        Alternative::Less => perm_stat <= observed,
+    }
+}
+
+/// Compute Welch's t-statistic for two samples.
+fn welch_t_statistic(a: &[f64], b: &[f64]) -> f64 {
+    let mean_a = mean(a).unwrap_or(0.0);
+    let mean_b = mean(b).unwrap_or(0.0);
+    let var_a = variance(a).unwrap_or(1.0);
+    let var_b = variance(b).unwrap_or(1.0);
+    let n_a = a.len() as f64;
+    let n_b = b.len() as f64;
+
+    let se = (var_a / n_a + var_b / n_b).sqrt();
+    if se < 1e-14 {
+        0.0
+    } else {
+        (mean_a - mean_b) / se
+    }
+}
+
+/// Validate inputs for permutation t-test.
+fn validate_permutation_inputs(x: &[f64], y: &[f64]) -> Result<()> {
+    if x.is_empty() || y.is_empty() {
+        return Err(StatError::EmptyData);
+    }
+    if x.len() < 2 {
+        return Err(StatError::InsufficientData {
+            needed: 2,
+            got: x.len(),
+        });
+    }
+    if y.len() < 2 {
+        return Err(StatError::InsufficientData {
+            needed: 2,
+            got: y.len(),
+        });
+    }
+    Ok(())
+}
+
 /// Result of a permutation test
 #[derive(Debug, Clone)]
 pub struct PermutationResult {
@@ -88,24 +135,13 @@ impl PermutationEngine {
         let mut count_extreme = 0usize;
 
         for _ in 0..self.n_permutations {
-            // Shuffle the combined data
             combined.shuffle(&mut rng);
 
-            // Split into two groups
             let perm_x = &combined[0..n1];
             let perm_y = &combined[n1..n_total];
-
-            // Compute permutation statistic
             let perm_stat = statistic_fn(perm_x, perm_y);
 
-            // Count based on alternative hypothesis
-            let is_extreme = match alternative {
-                Alternative::TwoSided => perm_stat.abs() >= observed.abs(),
-                Alternative::Greater => perm_stat >= observed,
-                Alternative::Less => perm_stat <= observed,
-            };
-
-            if is_extreme {
+            if is_extreme(perm_stat, observed, alternative) {
                 count_extreme += 1;
             }
         }
@@ -144,47 +180,14 @@ pub fn permutation_t_test(
     n_permutations: usize,
     seed: Option<u64>,
 ) -> Result<PermutationResult> {
-    if x.is_empty() || y.is_empty() {
-        return Err(StatError::EmptyData);
-    }
-
-    if x.len() < 2 {
-        return Err(StatError::InsufficientData {
-            needed: 2,
-            got: x.len(),
-        });
-    }
-
-    if y.len() < 2 {
-        return Err(StatError::InsufficientData {
-            needed: 2,
-            got: y.len(),
-        });
-    }
-
-    // T-statistic function (Welch's t-statistic)
-    let t_statistic = |a: &[f64], b: &[f64]| -> f64 {
-        let mean_a = mean(a).unwrap_or(0.0);
-        let mean_b = mean(b).unwrap_or(0.0);
-        let var_a = variance(a).unwrap_or(1.0);
-        let var_b = variance(b).unwrap_or(1.0);
-        let n_a = a.len() as f64;
-        let n_b = b.len() as f64;
-
-        let se = (var_a / n_a + var_b / n_b).sqrt();
-        if se < 1e-14 {
-            0.0
-        } else {
-            (mean_a - mean_b) / se
-        }
-    };
+    validate_permutation_inputs(x, y)?;
 
     let mut engine = PermutationEngine::new(n_permutations);
     if let Some(s) = seed {
         engine = engine.with_seed(s);
     }
 
-    engine.run(x, y, t_statistic, alternative)
+    engine.run(x, y, welch_t_statistic, alternative)
 }
 
 #[cfg(test)]

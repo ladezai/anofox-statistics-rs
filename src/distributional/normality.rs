@@ -88,95 +88,96 @@ fn swilk(x: &[f64]) -> (f64, f64) {
     (w, p_value)
 }
 
-/// Compute Shapiro-Wilk coefficients using Royston's algorithm (AS R94)
-fn compute_coefficients(n: usize) -> Vec<f64> {
+/// Compute expected values of normal order statistics (m values).
+fn compute_order_statistics(n: usize) -> Vec<f64> {
     let n_f = n as f64;
-    let nn2 = n / 2;
     let normal = Normal::new(0.0, 1.0).unwrap();
 
-    // Compute expected values of normal order statistics (m values)
-    // Using Blom's approximation: m_i = Φ^{-1}((i - 0.375)/(n + 0.25))
-    let mut m = vec![0.0; n];
-    for (i, m_i) in m.iter_mut().enumerate() {
-        let p = (i as f64 + 1.0 - 0.375) / (n_f + 0.25);
-        *m_i = normal.inverse_cdf(p);
+    (0..n)
+        .map(|i| {
+            let p = (i as f64 + 1.0 - 0.375) / (n_f + 0.25);
+            normal.inverse_cdf(p)
+        })
+        .collect()
+}
+
+/// Normalize coefficients so that sum(a^2) * 2 = 1.
+fn normalize_coefficients(a: &mut [f64]) {
+    let a_sum_sq: f64 = a.iter().map(|x| x * x).sum();
+    if a_sum_sq > 1e-10 {
+        let target = 0.5;
+        let scale = (target / a_sum_sq).sqrt();
+        for ai in a.iter_mut() {
+            *ai *= scale;
+        }
+    }
+}
+
+/// Compute coefficients for small samples (n <= 5).
+fn compute_coefficients_small(m: &[f64], n: usize, nn2: usize) -> Vec<f64> {
+    let mut a = vec![0.0; nn2];
+    for i in 0..nn2 {
+        a[i] = m[n - 1 - i] - m[i];
+    }
+    normalize_coefficients(&mut a);
+    a
+}
+
+/// Compute first two coefficients for large samples using Royston's polynomials.
+fn compute_first_two_coefficients(m: &[f64], sqrt_m2: f64, n: usize) -> (f64, f64) {
+    let sqrtn = (n as f64).sqrt();
+
+    let c1 = [
+        -2.706056, 4.434685, -2.07119, -0.147981, 0.221157, -0.0006714,
+    ];
+    let an = m[n - 1] / sqrt_m2 + poly_eval(&c1, 1.0 / sqrtn);
+
+    let c2 = [-3.582633, 5.682633, -1.752461, -0.293762, 0.042981, 0.0];
+    let an1 = if n > 6 {
+        m[n - 2] / sqrt_m2 + poly_eval(&c2, 1.0 / sqrtn)
+    } else {
+        m[n - 2] / sqrt_m2
+    };
+
+    (an, an1)
+}
+
+/// Compute coefficients for large samples (n > 5).
+fn compute_coefficients_large(m: &[f64], m2: f64, n: usize, nn2: usize) -> Vec<f64> {
+    let sqrt_m2 = m2.sqrt();
+    let (an, an1) = compute_first_two_coefficients(m, sqrt_m2, n);
+
+    // Compute phi for middle coefficients
+    let sum_first_two_sq = 2.0 * (an * an + an1 * an1);
+    let sum_middle_m_sq = m2 - 2.0 * m[n - 1].powi(2) - 2.0 * m[n - 2].powi(2);
+    let phi_sq = sum_middle_m_sq / (1.0 - sum_first_two_sq);
+    let phi = if phi_sq > 0.0 { phi_sq.sqrt() } else { 1.0 };
+
+    // Build coefficient array
+    let mut a = vec![0.0; nn2];
+    a[0] = an;
+    if nn2 > 1 {
+        a[1] = an1;
+    }
+    for i in 2..nn2 {
+        a[i] = m[n - 1 - i] / phi;
     }
 
-    // Compute sum of m^2
-    let m2: f64 = m.iter().map(|x| x * x).sum();
-    let sqrt_m2 = m2.sqrt();
+    normalize_coefficients(&mut a);
+    a
+}
 
-    // Initialize coefficient array
-    let mut a = vec![0.0; nn2];
+/// Compute Shapiro-Wilk coefficients using Royston's algorithm (AS R94).
+fn compute_coefficients(n: usize) -> Vec<f64> {
+    let nn2 = n / 2;
+    let m = compute_order_statistics(n);
+    let m2: f64 = m.iter().map(|x| x * x).sum();
 
     if n <= 5 {
-        // For small samples, use simple normalized coefficients
-        for i in 0..nn2 {
-            a[i] = m[n - 1 - i] - m[i];
-        }
-        // Normalize so that sum(a^2) * 2 = 1
-        let a_sum_sq: f64 = a.iter().map(|x| x * x).sum();
-        let norm = (2.0 * a_sum_sq).sqrt();
-        if norm > 0.0 {
-            for ai in &mut a {
-                *ai /= norm;
-            }
-        }
+        compute_coefficients_small(&m, n, nn2)
     } else {
-        // For n > 5, use Royston's polynomial approximation for first two coefficients
-        let sqrtn = n_f.sqrt();
-
-        // Polynomial coefficients from AS R94
-        // These are c1 and c2 arrays from the original algorithm
-        // a_n = m_n / sqrt(m2) + poly1(1/sqrt(n))
-        // a_{n-1} = m_{n-1} / sqrt(m2) + poly2(1/sqrt(n))
-
-        // First coefficient (for largest vs smallest pair)
-        let c1 = [
-            -2.706056, 4.434685, -2.07119, -0.147981, 0.221157, -0.0006714,
-        ];
-        let an = m[n - 1] / sqrt_m2 + poly_eval(&c1, 1.0 / sqrtn);
-
-        // Second coefficient
-        let c2 = [-3.582633, 5.682633, -1.752461, -0.293762, 0.042981, 0.0];
-        let an1 = if n > 6 {
-            m[n - 2] / sqrt_m2 + poly_eval(&c2, 1.0 / sqrtn)
-        } else {
-            m[n - 2] / sqrt_m2
-        };
-
-        // Compute phi for middle coefficients
-        let sum_first_two_sq = 2.0 * (an * an + an1 * an1);
-        let sum_middle_m_sq = m2 - 2.0 * m[n - 1].powi(2) - 2.0 * m[n - 2].powi(2);
-
-        let phi_sq = sum_middle_m_sq / (1.0 - sum_first_two_sq);
-        let phi = if phi_sq > 0.0 { phi_sq.sqrt() } else { 1.0 };
-
-        // Set coefficients
-        a[0] = an;
-        if nn2 > 1 {
-            a[1] = an1;
-        }
-
-        // Middle coefficients
-        for i in 2..nn2 {
-            // a[i] corresponds to pair (x[n-1-i], x[i])
-            // The coefficient is based on m[n-1-i] scaled appropriately
-            a[i] = m[n - 1 - i] / phi;
-        }
-
-        // Verify and adjust normalization to ensure sum(a^2) * 2 ≈ 1
-        let a_sum_sq: f64 = a.iter().map(|x| x * x).sum();
-        if a_sum_sq > 1e-10 {
-            let target = 0.5; // sum(a^2) should be 0.5 for half the coefficients
-            let scale = (target / a_sum_sq).sqrt();
-            for ai in &mut a {
-                *ai *= scale;
-            }
-        }
+        compute_coefficients_large(&m, m2, n, nn2)
     }
-
-    a
 }
 
 /// Evaluate polynomial c[0]*u^5 + c[1]*u^4 + c[2]*u^3 + c[3]*u^2 + c[4]*u + c[5]

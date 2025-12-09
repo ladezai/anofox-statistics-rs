@@ -16,6 +16,53 @@ pub struct BrunnerMunzelResult {
     pub estimate: f64,
 }
 
+/// Validate Brunner-Munzel test inputs.
+fn validate_bm_inputs(n1: usize, n2: usize) -> Result<()> {
+    if n1 == 0 || n2 == 0 {
+        return Err(StatError::EmptyData);
+    }
+    if n1 < 2 {
+        return Err(StatError::InsufficientData { needed: 2, got: n1 });
+    }
+    if n2 < 2 {
+        return Err(StatError::InsufficientData { needed: 2, got: n2 });
+    }
+    Ok(())
+}
+
+/// Compute Brunner-Munzel variance estimate for a sample.
+///
+/// v = sum((combined_rank - within_rank - mean_rank + (n+1)/2)^2) / (n-1)
+fn compute_bm_variance(
+    combined_ranks: &[f64],
+    within_ranks: &[f64],
+    mean_rank: f64,
+    n: f64,
+) -> f64 {
+    combined_ranks
+        .iter()
+        .zip(within_ranks.iter())
+        .map(|(ri, wi)| {
+            let diff = ri - wi - mean_rank + (n + 1.0) / 2.0;
+            diff * diff
+        })
+        .sum::<f64>()
+        / (n - 1.0)
+}
+
+/// Compute p-value from t-distribution based on alternative hypothesis.
+fn compute_bm_pvalue(statistic: f64, df: f64, alternative: Alternative) -> f64 {
+    let t_dist = StudentsT::new(0.0, 1.0, df).unwrap();
+
+    match alternative {
+        Alternative::TwoSided => {
+            2.0 * (1.0 - t_dist.cdf(statistic.abs())).min(t_dist.cdf(statistic.abs()))
+        }
+        Alternative::Greater => t_dist.cdf(statistic),
+        Alternative::Less => 1.0 - t_dist.cdf(statistic),
+    }
+}
+
 /// Perform the Brunner-Munzel test for stochastic equality.
 ///
 /// This is a robust alternative to the Mann-Whitney U test that handles
@@ -41,17 +88,7 @@ pub fn brunner_munzel(
     let n1 = x.len();
     let n2 = y.len();
 
-    if n1 == 0 || n2 == 0 {
-        return Err(StatError::EmptyData);
-    }
-
-    if n1 < 2 {
-        return Err(StatError::InsufficientData { needed: 2, got: n1 });
-    }
-
-    if n2 < 2 {
-        return Err(StatError::InsufficientData { needed: 2, got: n2 });
-    }
+    validate_bm_inputs(n1, n2)?;
 
     let n1_f = n1 as f64;
     let n2_f = n2 as f64;
@@ -76,27 +113,8 @@ pub fn brunner_munzel(
     let pst = (m2 - (n2_f + 1.0) / 2.0) / n1_f;
 
     // Variance estimates
-    // v1 = sum((r[1:n1] - r1 - m1 + (n1+1)/2)^2) / (n1-1)
-    let v1: f64 = r_x
-        .iter()
-        .zip(r1.iter())
-        .map(|(ri, r1i)| {
-            let diff = ri - r1i - m1 + (n1_f + 1.0) / 2.0;
-            diff * diff
-        })
-        .sum::<f64>()
-        / (n1_f - 1.0);
-
-    // v2 = sum((r[n1+1:n2] - r2 - m2 + (n2+1)/2)^2) / (n2-1)
-    let v2: f64 = r_y
-        .iter()
-        .zip(r2.iter())
-        .map(|(ri, r2i)| {
-            let diff = ri - r2i - m2 + (n2_f + 1.0) / 2.0;
-            diff * diff
-        })
-        .sum::<f64>()
-        / (n2_f - 1.0);
+    let v1 = compute_bm_variance(r_x, &r1, m1, n1_f);
+    let v2 = compute_bm_variance(r_y, &r2, m2, n2_f);
 
     // Test statistic
     let n_total = n1_f + n2_f;
@@ -115,15 +133,7 @@ pub fn brunner_munzel(
         var_sum.powi(2) / ((n1_f * v1).powi(2) / (n1_f - 1.0) + (n2_f * v2).powi(2) / (n2_f - 1.0));
 
     // P-value from t-distribution
-    let t_dist = StudentsT::new(0.0, 1.0, df).unwrap();
-
-    let p_value = match alternative {
-        Alternative::TwoSided => {
-            2.0 * (1.0 - t_dist.cdf(statistic.abs())).min(t_dist.cdf(statistic.abs()))
-        }
-        Alternative::Greater => t_dist.cdf(statistic),
-        Alternative::Less => 1.0 - t_dist.cdf(statistic),
-    };
+    let p_value = compute_bm_pvalue(statistic, df, alternative);
 
     Ok(BrunnerMunzelResult {
         statistic,

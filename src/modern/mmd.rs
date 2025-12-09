@@ -78,6 +78,31 @@ fn kernel_value(kernel: Kernel, a: &[f64], b: &[f64]) -> f64 {
     }
 }
 
+/// Sum kernel values for all pairs within a sample, excluding diagonal.
+fn sum_kernel_within(samples: &[&[f64]], kernel: Kernel) -> f64 {
+    let n = samples.len();
+    let mut sum = 0.0;
+    for i in 0..n {
+        for j in 0..n {
+            if i != j {
+                sum += kernel_value(kernel, samples[i], samples[j]);
+            }
+        }
+    }
+    sum
+}
+
+/// Sum kernel values for all pairs between two samples.
+fn sum_kernel_cross(x: &[&[f64]], y: &[&[f64]], kernel: Kernel) -> f64 {
+    let mut sum = 0.0;
+    for xi in x.iter() {
+        for yj in y.iter() {
+            sum += kernel_value(kernel, xi, yj);
+        }
+    }
+    sum
+}
+
 /// Compute the unbiased MMD^2 estimator.
 ///
 /// MMD^2 = 1/(m(m-1)) * sum_{i≠j} k(x_i, x_j)
@@ -94,35 +119,10 @@ fn mmd_squared(x: &[&[f64]], y: &[&[f64]], kernel: Kernel) -> f64 {
     let m_f = m as f64;
     let n_f = n as f64;
 
-    // k(x_i, x_j) for i ≠ j
-    let mut sum_xx = 0.0;
-    for i in 0..m {
-        for j in 0..m {
-            if i != j {
-                sum_xx += kernel_value(kernel, x[i], x[j]);
-            }
-        }
-    }
+    let sum_xx = sum_kernel_within(x, kernel);
+    let sum_yy = sum_kernel_within(y, kernel);
+    let sum_xy = sum_kernel_cross(x, y, kernel);
 
-    // k(y_i, y_j) for i ≠ j
-    let mut sum_yy = 0.0;
-    for i in 0..n {
-        for j in 0..n {
-            if i != j {
-                sum_yy += kernel_value(kernel, y[i], y[j]);
-            }
-        }
-    }
-
-    // k(x_i, y_j)
-    let mut sum_xy = 0.0;
-    for xi in x.iter() {
-        for yj in y.iter() {
-            sum_xy += kernel_value(kernel, xi, yj);
-        }
-    }
-
-    // Unbiased estimator
     sum_xx / (m_f * (m_f - 1.0)) + sum_yy / (n_f * (n_f - 1.0)) - 2.0 * sum_xy / (m_f * n_f)
 }
 
@@ -171,42 +171,47 @@ pub fn mmd_test(
     })
 }
 
-/// Validate MMD test inputs.
-fn validate_mmd_inputs(x: &[Vec<f64>], y: &[Vec<f64>]) -> Result<()> {
+/// Validate sample sizes for MMD test.
+fn validate_sample_sizes(x: &[Vec<f64>], y: &[Vec<f64>]) -> Result<()> {
     if x.is_empty() || y.is_empty() {
         return Err(StatError::EmptyData);
     }
-
     if x.len() < 2 {
         return Err(StatError::InsufficientData {
             needed: 2,
             got: x.len(),
         });
     }
-
     if y.len() < 2 {
         return Err(StatError::InsufficientData {
             needed: 2,
             got: y.len(),
         });
     }
+    Ok(())
+}
 
+/// Validate dimensions are consistent across all data points.
+fn validate_dimensions(x: &[Vec<f64>], y: &[Vec<f64>]) -> Result<()> {
     let dim = x[0].len();
     if dim == 0 {
         return Err(StatError::InvalidParameter(
             "Data points must have at least one dimension".to_string(),
         ));
     }
-
-    // Check all points have consistent dimension
     let all_same_dim = x.iter().chain(y.iter()).all(|v| v.len() == dim);
     if !all_same_dim {
         return Err(StatError::InvalidParameter(
             "All data points must have the same dimension".to_string(),
         ));
     }
-
     Ok(())
+}
+
+/// Validate MMD test inputs.
+fn validate_mmd_inputs(x: &[Vec<f64>], y: &[Vec<f64>]) -> Result<()> {
+    validate_sample_sizes(x, y)?;
+    validate_dimensions(x, y)
 }
 
 /// Run the permutation test for MMD.
