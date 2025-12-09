@@ -178,11 +178,7 @@ mod tests {
 
     #[test]
     fn test_mcs_multiple_inferior_models() {
-        let losses = vec![
-            vec![1.0; 100],
-            vec![2.0; 100],
-            vec![5.0; 100],
-        ];
+        let losses = vec![vec![1.0; 100], vec![2.0; 100], vec![5.0; 100]];
         let result =
             model_confidence_set(&losses, 0.10, MCSStatistic::Range, 500, 5.0, Some(42)).unwrap();
 
@@ -202,11 +198,7 @@ mod tests {
 
     #[test]
     fn test_mcs_elimination_sequence() {
-        let losses = vec![
-            vec![1.0; 100],
-            vec![3.0; 100],
-            vec![5.0; 100],
-        ];
+        let losses = vec![vec![1.0; 100], vec![3.0; 100], vec![5.0; 100]];
         let result =
             model_confidence_set(&losses, 0.25, MCSStatistic::Range, 500, 5.0, Some(42)).unwrap();
 
