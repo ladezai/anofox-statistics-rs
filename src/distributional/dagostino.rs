@@ -2,6 +2,15 @@ use crate::error::{Result, StatError};
 use crate::utils::math::mean;
 use statrs::distribution::{ChiSquared, ContinuousCDF};
 
+/// Compute cube root that handles negative values correctly.
+fn cbrt(x: f64) -> f64 {
+    if x >= 0.0 {
+        x.powf(1.0 / 3.0)
+    } else {
+        -((-x).powf(1.0 / 3.0))
+    }
+}
+
 /// Result of D'Agostino's K-squared test
 #[derive(Debug, Clone)]
 pub struct DAgostinoResult {
@@ -152,22 +161,12 @@ fn kurtosis_test(b2: f64, n: f64) -> Result<f64> {
     let term1 = 1.0 - 2.0 / (9.0 * a);
     let inner_denom = 1.0 + x * (2.0 / (a - 4.0)).sqrt();
 
-    let z = if inner_denom.abs() < 1e-14 {
-        0.0
-    } else {
-        let term2_inner = (1.0 - 2.0 / a) / inner_denom;
-        // Cube root: handle negative values properly
-        let term2 = if term2_inner >= 0.0 {
-            term2_inner.powf(1.0 / 3.0)
-        } else {
-            -((-term2_inner).powf(1.0 / 3.0))
-        };
+    if inner_denom.abs() < 1e-14 {
+        return Ok(0.0);
+    }
 
-        // Z = (term1 - term2) / sqrt(2/(9A))
-        (term1 - term2) / (2.0 / (9.0 * a)).sqrt()
-    };
-
-    Ok(z)
+    let term2 = cbrt((1.0 - 2.0 / a) / inner_denom);
+    Ok((term1 - term2) / (2.0 / (9.0 * a)).sqrt())
 }
 
 #[cfg(test)]

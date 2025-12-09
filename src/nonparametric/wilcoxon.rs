@@ -2,6 +2,23 @@ use crate::error::{Result, StatError};
 use crate::nonparametric::ranks::rank_with_ties;
 use statrs::distribution::{ContinuousCDF, Normal};
 
+/// Compute tie correction factor: sum(t^3 - t) for all tie groups.
+fn tie_correction(tie_sizes: &[usize]) -> f64 {
+    tie_sizes
+        .iter()
+        .map(|&t| {
+            let t = t as f64;
+            t * t * t - t
+        })
+        .sum()
+}
+
+/// Compute two-sided p-value from z-score using standard normal.
+fn two_sided_p_value(z: f64) -> f64 {
+    let normal = Normal::new(0.0, 1.0).unwrap();
+    2.0 * (1.0 - normal.cdf(z.abs()))
+}
+
 /// Result of Mann-Whitney U test
 #[derive(Debug, Clone)]
 pub struct MannWhitneyResult {
@@ -63,25 +80,11 @@ pub fn mann_whitney_u(x: &[f64], y: &[f64]) -> Result<MannWhitneyResult> {
 
     let mu = nx_f * ny_f / 2.0;
 
-    // Variance with tie correction
-    // Var(U) = (n1*n2/12) * (n + 1 - sum(t^3 - t)/(n*(n-1)))
-    let tie_correction: f64 = tie_sizes
-        .iter()
-        .map(|&t| {
-            let t = t as f64;
-            t * t * t - t
-        })
-        .sum();
-
-    let sigma_sq = (nx_f * ny_f / 12.0) * ((n_f + 1.0) - tie_correction / (n_f * (n_f - 1.0)));
-    let sigma = sigma_sq.sqrt();
-
-    // Z-score (no continuity correction)
-    let z = (u1 - mu) / sigma;
-
-    // Two-sided p-value
-    let normal = Normal::new(0.0, 1.0).unwrap();
-    let p_value = 2.0 * (1.0 - normal.cdf(z.abs()));
+    // Variance with tie correction: Var(U) = (n1*n2/12) * (n + 1 - sum(t^3 - t)/(n*(n-1)))
+    let tc = tie_correction(&tie_sizes);
+    let sigma_sq = (nx_f * ny_f / 12.0) * ((n_f + 1.0) - tc / (n_f * (n_f - 1.0)));
+    let z = (u1 - mu) / sigma_sq.sqrt();
+    let p_value = two_sided_p_value(z);
 
     Ok(MannWhitneyResult {
         statistic: u1,
@@ -150,25 +153,11 @@ pub fn wilcoxon_signed_rank(x: &[f64], y: &[f64]) -> Result<WilcoxonResult> {
     // Expected value under null: E(V) = n(n+1)/4
     let mu = n_f * (n_f + 1.0) / 4.0;
 
-    // Variance with tie correction
-    // Var(V) = n(n+1)(2n+1)/24 - sum(t^3 - t)/48
-    let tie_correction: f64 = tie_sizes
-        .iter()
-        .map(|&t| {
-            let t = t as f64;
-            t * t * t - t
-        })
-        .sum();
-
-    let sigma_sq = n_f * (n_f + 1.0) * (2.0 * n_f + 1.0) / 24.0 - tie_correction / 48.0;
-    let sigma = sigma_sq.sqrt();
-
-    // Z-score (no continuity correction)
-    let z = (v - mu) / sigma;
-
-    // Two-sided p-value
-    let normal = Normal::new(0.0, 1.0).unwrap();
-    let p_value = 2.0 * (1.0 - normal.cdf(z.abs()));
+    // Variance with tie correction: Var(V) = n(n+1)(2n+1)/24 - sum(t^3 - t)/48
+    let tc = tie_correction(&tie_sizes);
+    let sigma_sq = n_f * (n_f + 1.0) * (2.0 * n_f + 1.0) / 24.0 - tc / 48.0;
+    let z = (v - mu) / sigma_sq.sqrt();
+    let p_value = two_sided_p_value(z);
 
     Ok(WilcoxonResult {
         statistic: v,

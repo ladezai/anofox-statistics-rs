@@ -101,45 +101,35 @@ pub fn clark_west(e1: &[f64], e2: &[f64], h: usize) -> Result<CWResult> {
     })
 }
 
+/// Compute autocovariance at a specific lag.
+fn autocovariance(centered: &[f64], lag: usize) -> f64 {
+    let n_f = centered.len() as f64;
+    centered
+        .iter()
+        .skip(lag)
+        .zip(centered.iter())
+        .map(|(d_t, d_t_k)| d_t * d_t_k)
+        .sum::<f64>()
+        / n_f
+}
+
 /// Compute HAC variance of the mean for Clark-West test.
 /// Uses the same approach as the Diebold-Mariano test.
 fn cw_variance(d: &[f64], h: usize) -> f64 {
     let n = d.len();
     let n_f = n as f64;
-
-    // Mean of d
     let d_bar: f64 = d.iter().sum::<f64>() / n_f;
-
-    // Centered series
     let d_centered: Vec<f64> = d.iter().map(|x| x - d_bar).collect();
 
-    // Compute autocovariances (matching R's acf with type="covariance")
-    let max_lag = if h > 0 { h - 1 } else { 0 };
+    let max_lag = h.saturating_sub(1);
+    let gamma_0 = autocovariance(&d_centered, 0);
 
-    // Lag 0 autocovariance
-    let gamma_0: f64 = d_centered.iter().map(|x| x * x).sum::<f64>() / n_f;
+    let lagged_sum: f64 = (1..=max_lag)
+        .take_while(|&k| k < n)
+        .map(|k| 2.0 * autocovariance(&d_centered, k))
+        .sum();
 
-    // Sum autocovariances: gamma_0 + 2 * sum(gamma_k for k=1..h-1)
-    let mut acov_sum = gamma_0;
-
-    for k in 1..=max_lag {
-        if k >= n {
-            break;
-        }
-        // Autocovariance at lag k
-        let gamma_k: f64 = d_centered
-            .iter()
-            .skip(k)
-            .zip(d_centered.iter())
-            .map(|(d_t, d_t_k)| d_t * d_t_k)
-            .sum::<f64>()
-            / n_f;
-
-        acov_sum += 2.0 * gamma_k;
-    }
-
-    // Variance of the mean = sum(autocovariances) / n
-    acov_sum / n_f
+    (gamma_0 + lagged_sum) / n_f
 }
 
 #[cfg(test)]

@@ -1,5 +1,42 @@
 use crate::error::{Result, StatError};
 
+/// Sort data by value and return index-value pairs.
+fn sort_indexed(data: &[f64]) -> Vec<(usize, f64)> {
+    let mut indexed: Vec<(usize, f64)> = data.iter().cloned().enumerate().collect();
+    indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+    indexed
+}
+
+/// Find the end index of a tie group starting at `start`.
+fn find_tie_group_end(indexed: &[(usize, f64)], start: usize) -> usize {
+    let value = indexed[start].1;
+    indexed[start..]
+        .iter()
+        .take_while(|(_, v)| *v == value)
+        .count()
+        + start
+}
+
+/// Assign average rank to a tie group and optionally record tie size.
+fn assign_tie_group_ranks(
+    indexed: &[(usize, f64)],
+    ranks: &mut [f64],
+    start: usize,
+    end: usize,
+    tie_sizes: Option<&mut Vec<usize>>,
+) {
+    let avg_rank = (start + 1 + end) as f64 / 2.0;
+    for item in indexed.iter().take(end).skip(start) {
+        ranks[item.0] = avg_rank;
+    }
+    if let Some(ties) = tie_sizes {
+        let tie_size = end - start;
+        if tie_size > 1 {
+            ties.push(tie_size);
+        }
+    }
+}
+
 /// Compute ranks of data with average tie handling (matching R's rank(ties.method="average")).
 ///
 /// # Arguments
@@ -12,32 +49,13 @@ pub fn rank(data: &[f64]) -> Result<Vec<f64>> {
         return Err(StatError::EmptyData);
     }
 
-    let n = data.len();
+    let indexed = sort_indexed(data);
+    let mut ranks = vec![0.0; data.len()];
 
-    // Create index-value pairs and sort by value
-    let mut indexed: Vec<(usize, f64)> = data.iter().cloned().enumerate().collect();
-    indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-
-    let mut ranks = vec![0.0; n];
-
-    // Assign ranks, handling ties by averaging
     let mut i = 0;
-    while i < n {
-        let mut j = i;
-        // Find all elements with the same value (ties)
-        while j < n && indexed[j].1 == indexed[i].1 {
-            j += 1;
-        }
-
-        // Average rank for ties: (start_rank + end_rank) / 2
-        // Ranks are 1-indexed: positions i..j get ranks (i+1)..(j+1)
-        let avg_rank = (i + 1 + j) as f64 / 2.0;
-
-        // Assign the average rank to all tied elements
-        for item in indexed.iter().take(j).skip(i) {
-            ranks[item.0] = avg_rank;
-        }
-
+    while i < indexed.len() {
+        let j = find_tie_group_end(&indexed, i);
+        assign_tie_group_ranks(&indexed, &mut ranks, i, j, None);
         i = j;
     }
 
@@ -50,37 +68,14 @@ pub(crate) fn rank_with_ties(data: &[f64]) -> Result<(Vec<f64>, Vec<usize>)> {
         return Err(StatError::EmptyData);
     }
 
-    let n = data.len();
-
-    // Create index-value pairs and sort by value
-    let mut indexed: Vec<(usize, f64)> = data.iter().cloned().enumerate().collect();
-    indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-
-    let mut ranks = vec![0.0; n];
+    let indexed = sort_indexed(data);
+    let mut ranks = vec![0.0; data.len()];
     let mut tie_sizes = Vec::new();
 
-    // Assign ranks, handling ties by averaging
     let mut i = 0;
-    while i < n {
-        let mut j = i;
-        // Find all elements with the same value (ties)
-        while j < n && indexed[j].1 == indexed[i].1 {
-            j += 1;
-        }
-
-        let tie_size = j - i;
-        if tie_size > 1 {
-            tie_sizes.push(tie_size);
-        }
-
-        // Average rank for ties
-        let avg_rank = (i + 1 + j) as f64 / 2.0;
-
-        // Assign the average rank to all tied elements
-        for item in indexed.iter().take(j).skip(i) {
-            ranks[item.0] = avg_rank;
-        }
-
+    while i < indexed.len() {
+        let j = find_tie_group_end(&indexed, i);
+        assign_tie_group_ranks(&indexed, &mut ranks, i, j, Some(&mut tie_sizes));
         i = j;
     }
 
